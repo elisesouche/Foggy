@@ -10,5 +10,8 @@
     <string name="tracking_notification_text">Saving GPS points every %1$d seconds.</string>
     <string name="edit_mode_enter">Edit</string>
     <string name="edit_mode_exit">Done</string>
-    <string name="edit_mode_hint">Tap to reveal · Hold to erase</string>
+    <string name="edit_mode_hint">Drag to reveal</string>
+    <string name="edit_mode_hint_erase">Drag to erase</string>
+    <string name="erase_mode_enter">Erase</string>
+    <string name="erase_mode_exit">Reveal</string>
 </resources>

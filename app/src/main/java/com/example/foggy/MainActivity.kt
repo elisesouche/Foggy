@@ -69,6 +69,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fogModeButton: Button
     private lateinit var trackingButton: Button
     private lateinit var editButton: Button
+    private lateinit var eraseToggleButton: Button
     private lateinit var editModeHint: TextView
     private lateinit var discoveredPercentText: TextView
     private lateinit var currentCityText: TextView
@@ -81,6 +82,7 @@ class MainActivity : AppCompatActivity() {
     private var locationOverlay: MyLocationNewOverlay? = null
     private var useBlackFog = true
     private var isEditMode = false
+    private var isEraseMode = false
     private var hasCenteredOnSavedPoint = false
     private var hasCenteredOnGps = false
     private var lastResolvedCityName: String? = null
@@ -113,6 +115,7 @@ class MainActivity : AppCompatActivity() {
         fogModeButton = findViewById(R.id.fogModeButton)
         trackingButton = findViewById(R.id.trackingButton)
         editButton = findViewById(R.id.editButton)
+        eraseToggleButton = findViewById(R.id.eraseToggleButton)
         editModeHint = findViewById(R.id.editModeHint)
         discoveredPercentText = findViewById(R.id.discoveredPercentText)
         currentCityText = findViewById(R.id.currentCityText)
@@ -149,6 +152,12 @@ class MainActivity : AppCompatActivity() {
 
         editButton.setOnClickListener {
             isEditMode = !isEditMode
+            if (!isEditMode) isEraseMode = false
+            updateEditModeUi()
+        }
+
+        eraseToggleButton.setOnClickListener {
+            isEraseMode = !isEraseMode
             updateEditModeUi()
         }
 
@@ -685,7 +694,14 @@ class MainActivity : AppCompatActivity() {
         } else {
             getString(R.string.edit_mode_enter)
         }
+        eraseToggleButton.visibility = if (isEditMode) View.VISIBLE else View.GONE
+        eraseToggleButton.text = if (isEraseMode) {
+            getString(R.string.erase_mode_exit)
+        } else {
+            getString(R.string.erase_mode_enter)
+        }
         editModeHint.visibility = if (isEditMode) View.VISIBLE else View.GONE
+        editModeHint.text = if (isEraseMode) getString(R.string.edit_mode_hint_erase) else getString(R.string.edit_mode_hint)
     }
 
     @Deprecated("Deprecated in Java")
@@ -1011,24 +1027,47 @@ class MainActivity : AppCompatActivity() {
     }
 
     private inner class EditModeOverlay : Overlay() {
-        override fun onSingleTapConfirmed(e: MotionEvent, mapView: MapView): Boolean {
+        private val moveThresholdPx = 8f
+        private var lastX = Float.NaN
+        private var lastY = Float.NaN
+
+        override fun onTouchEvent(event: MotionEvent, mapView: MapView): Boolean {
             if (!isEditMode) return false
-            val geoPoint = mapView.projection.fromPixels(e.x.toInt(), e.y.toInt()) as GeoPoint
-            databaseExecutor.execute {
-                locationHistoryDatabase.insertManualPoint(geoPoint.latitude, geoPoint.longitude)
-                runOnUiThread { refreshSavedPoints() }
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    lastX = event.x
+                    lastY = event.y
+                    processEditAt(event.x, event.y, mapView)
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.x - lastX
+                    val dy = event.y - lastY
+                    if (dx * dx + dy * dy >= moveThresholdPx * moveThresholdPx) {
+                        lastX = event.x
+                        lastY = event.y
+                        processEditAt(event.x, event.y, mapView)
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    lastX = Float.NaN
+                    lastY = Float.NaN
+                    databaseExecutor.execute {
+                        runOnUiThread { refreshSavedPoints() }
+                    }
+                }
             }
             return true
         }
 
-        override fun onLongPress(e: MotionEvent, mapView: MapView): Boolean {
-            if (!isEditMode) return false
-            val geoPoint = mapView.projection.fromPixels(e.x.toInt(), e.y.toInt()) as GeoPoint
+        private fun processEditAt(x: Float, y: Float, mapView: MapView) {
+            val geoPoint = mapView.projection.fromPixels(x.toInt(), y.toInt()) as GeoPoint
             databaseExecutor.execute {
-                locationHistoryDatabase.deleteNearPoint(geoPoint.latitude, geoPoint.longitude)
-                runOnUiThread { refreshSavedPoints() }
+                if (isEraseMode) {
+                    locationHistoryDatabase.deleteNearPoint(geoPoint.latitude, geoPoint.longitude)
+                } else {
+                    locationHistoryDatabase.insertManualPoint(geoPoint.latitude, geoPoint.longitude)
+                }
             }
-            return true
         }
     }
 }
