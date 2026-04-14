@@ -15,6 +15,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.MotionEvent
+import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -66,15 +68,19 @@ class MainActivity : AppCompatActivity() {
     private lateinit var map: MapView
     private lateinit var fogModeButton: Button
     private lateinit var trackingButton: Button
+    private lateinit var editButton: Button
+    private lateinit var editModeHint: TextView
     private lateinit var discoveredPercentText: TextView
     private lateinit var currentCityText: TextView
     private lateinit var locationHistoryDatabase: LocationHistoryDatabase
     private lateinit var savedPointsOverlay: SavedPointsOverlay
     private lateinit var gridOverlay: GridOverlay
+    private lateinit var editModeOverlay: EditModeOverlay
     private lateinit var cityBoundaryOverlay: Polygon
     private lateinit var fogOverlay: FogOverlay
     private var locationOverlay: MyLocationNewOverlay? = null
     private var useBlackFog = true
+    private var isEditMode = false
     private var hasCenteredOnSavedPoint = false
     private var hasCenteredOnGps = false
     private var lastResolvedCityName: String? = null
@@ -106,11 +112,14 @@ class MainActivity : AppCompatActivity() {
         map = findViewById(R.id.map)
         fogModeButton = findViewById(R.id.fogModeButton)
         trackingButton = findViewById(R.id.trackingButton)
+        editButton = findViewById(R.id.editButton)
+        editModeHint = findViewById(R.id.editModeHint)
         discoveredPercentText = findViewById(R.id.discoveredPercentText)
         currentCityText = findViewById(R.id.currentCityText)
         locationHistoryDatabase = LocationHistoryDatabase(applicationContext)
         savedPointsOverlay = SavedPointsOverlay()
         gridOverlay = GridOverlay()
+        editModeOverlay = EditModeOverlay()
         cityBoundaryOverlay = createCityBoundaryOverlay()
         fogOverlay = FogOverlay()
 
@@ -119,6 +128,7 @@ class MainActivity : AppCompatActivity() {
         map.controller.setCenter(GeoPoint(45.75, 4.85))
         map.overlays.add(savedPointsOverlay)
         map.overlays.add(gridOverlay)
+        map.overlays.add(editModeOverlay)
         map.overlays.add(fogOverlay)
         map.overlays.add(cityBoundaryOverlay)
         centerMapOnSavedPointAtStartup()
@@ -135,6 +145,11 @@ class MainActivity : AppCompatActivity() {
             useBlackFog = !useBlackFog
             updateFogModeButton()
             map.invalidate()
+        }
+
+        editButton.setOnClickListener {
+            isEditMode = !isEditMode
+            updateEditModeUi()
         }
 
         refreshSavedPoints()
@@ -639,9 +654,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun keepOverlayOrder() {
         map.overlays.remove(gridOverlay)
+        map.overlays.remove(editModeOverlay)
         map.overlays.remove(fogOverlay)
         map.overlays.remove(cityBoundaryOverlay)
         map.overlays.add(gridOverlay)
+        map.overlays.add(editModeOverlay)
         map.overlays.add(fogOverlay)
         map.overlays.add(cityBoundaryOverlay)
     }
@@ -660,6 +677,15 @@ class MainActivity : AppCompatActivity() {
         } else {
             getString(R.string.show_black_fog)
         }
+    }
+
+    private fun updateEditModeUi() {
+        editButton.text = if (isEditMode) {
+            getString(R.string.edit_mode_exit)
+        } else {
+            getString(R.string.edit_mode_enter)
+        }
+        editModeHint.visibility = if (isEditMode) View.VISIBLE else View.GONE
     }
 
     @Deprecated("Deprecated in Java")
@@ -981,6 +1007,28 @@ class MainActivity : AppCompatActivity() {
     ) {
         fun contains(latitude: Double, longitude: Double): Boolean {
             return latitude in south..north && longitude in west..east
+        }
+    }
+
+    private inner class EditModeOverlay : Overlay() {
+        override fun onSingleTapConfirmed(e: MotionEvent, mapView: MapView): Boolean {
+            if (!isEditMode) return false
+            val geoPoint = mapView.projection.fromPixels(e.x.toInt(), e.y.toInt()) as GeoPoint
+            databaseExecutor.execute {
+                locationHistoryDatabase.insertManualPoint(geoPoint.latitude, geoPoint.longitude)
+                runOnUiThread { refreshSavedPoints() }
+            }
+            return true
+        }
+
+        override fun onLongPress(e: MotionEvent, mapView: MapView): Boolean {
+            if (!isEditMode) return false
+            val geoPoint = mapView.projection.fromPixels(e.x.toInt(), e.y.toInt()) as GeoPoint
+            databaseExecutor.execute {
+                locationHistoryDatabase.deleteNearPoint(geoPoint.latitude, geoPoint.longitude)
+                runOnUiThread { refreshSavedPoints() }
+            }
+            return true
         }
     }
 }

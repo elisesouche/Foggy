@@ -86,6 +86,33 @@ class LocationHistoryDatabase(context: Context) : SQLiteOpenHelper(
         }
     }
 
+    fun insertManualPoint(latitude: Double, longitude: Double) {
+        insertPoint(
+            latitude = latitude,
+            longitude = longitude,
+            altitude = 0.0,
+            accuracy = 0f,
+            recordedAt = System.currentTimeMillis()
+        )
+    }
+
+    fun deleteNearPoint(latitude: Double, longitude: Double) {
+        val cells = revealedCellsAround(latitude, longitude)
+        writableDatabase.beginTransaction()
+        try {
+            for (cell in cells) {
+                writableDatabase.delete(
+                    TABLE_POINTS,
+                    "$COLUMN_GRID_COLUMN = ? AND $COLUMN_GRID_ROW = ?",
+                    arrayOf(cell.column.toString(), cell.row.toString())
+                )
+            }
+            writableDatabase.setTransactionSuccessful()
+        } finally {
+            writableDatabase.endTransaction()
+        }
+    }
+
     fun getAllPoints(): List<StoredLocationPoint> {
         return getAllCells().map(::gridCellToLatLon)
     }

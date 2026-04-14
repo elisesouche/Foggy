@@ -8,4 +8,7 @@
     <string name="discovered_percent_default">0.000%</string>
     <string name="tracking_notification_title">Foggy tracking active</string>
     <string name="tracking_notification_text">Saving GPS points every %1$d seconds.</string>
+    <string name="edit_mode_enter">Edit</string>
+    <string name="edit_mode_exit">Done</string>
+    <string name="edit_mode_hint">Tap to reveal · Hold to erase</string>
 </resources>
